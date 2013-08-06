@@ -27,12 +27,14 @@ Installation
 ------------
 
 .. code-block:: bash
+
    $ pip install -e git@github.com:keflavich/molecular_hydrogen.git
 
 Usage
 -----
 
 .. code-block:: python
+
    >>> from molecular_hydrogen import h2
    >>> h2.linename_to_restwl('1-0 Q(1)')
    2.406594067745623
