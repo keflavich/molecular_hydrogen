@@ -81,6 +81,13 @@ def linename_to_restwl(linename):
     Returns
     -------
     Wavelength in microns
+
+    Examples
+    --------
+    >>> linename_to_restwl('1-0 S(1)') 
+    2.1218313101671793
+    >>> linename_to_restwl('1-0 Q(1)')
+    2.406594067745623
     """
     upper,lower = re.compile('([0-9]*)-([0-9]*)').search(linename).groups()
     transtype,jl = re.compile('([SQO])\(([0-9]*)\)').search(linename).groups()
