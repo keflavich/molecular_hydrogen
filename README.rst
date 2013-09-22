@@ -47,3 +47,9 @@ Usage
 .. _Download TAR: https://github.com/keflavich/molecular_hydrogen/tarball/master
 .. _View on Github: https://github.com/keflavich/molecular_hydrogen/
 .. _Documentation: https://github.com/keflavich/molecular_hydrogen/README.rst
+
+
+.. image:: https://d2weczhvl823v0.cloudfront.net/keflavich/molecular_hydrogen/trend.png
+   :alt: Bitdeli badge
+   :target: https://bitdeli.com/free
+
