@@ -1,11 +1,19 @@
 import numpy as np
 import re
+from astropy import units as u
+from astropy import constants
 
 # define physical constants to high precision
-h=6.626068e-27
-c=2.99792e10
-k=1.3806503e-16
-e=4.803e-12
+h=constants.h #6.626068e-27
+c=constants.c #2.99792e10
+k=constants.k_B # 1.3806503e-16
+e=constants.e #4.803e-12
+
+We=4401.21*u.cm**-1
+Be=60.853*u.cm**-1
+WeXe=121.33*u.cm**-1
+De=.0471*u.cm**-1
+Ae=3.062*u.cm**-1
 
 def h2level_energy(V,J):
     """ Returns the theoretical level energy as a function of the
@@ -16,14 +24,11 @@ def h2level_energy(V,J):
     (see the bottom of the table)
     """
 
-    We=4401.21
-    Be=60.853
-    WeXe=121.33
-    De=.0471
-    Ae=3.062
     # not used re=0.74144
 
-    return h * c * (We*(V+0.5) + Be*(J*(J+1)) - WeXe*(V+.5)**2 - De*J**2*(J+1)**2 - Ae*(V+.5)*(J+1)*J)
+    return (constants.h * constants.c * (We*(V+0.5) + Be*(J*(J+1)) -
+                                         WeXe*(V+.5)**2 - De*J**2*(J+1)**2 -
+                                         Ae*(V+.5)*(J+1)*J)).to(u.erg)
 
 # Dalgarno 1984 table
 resten = np.array(
@@ -61,8 +66,7 @@ def restwl(vu,vl,ju,jl):
         raise NotImplementedError("No data for ju=%i,vu=%i" % (ju,vu))
     # resten is in inverse cm.  Convert to m
     dl = .01/(resten[ju][vu]-resten[jl][vl])
-    # 1e6 converts meters to microns
-    return dl * 1e6
+    return (dl * u.m).to(u.um)
 
 transdiff = {'S':2,'Q':0,'O':-2}
 
@@ -131,5 +135,32 @@ def aval(v,ju,jl):
     vibrational level, upper/lower J level
     Values from: http://www.jach.hawaii.edu/UKIRT/astronomy/calib/spec_cal/h2_s.html
     """
+    try:
+        return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]*u.s**-1
+    except KeyError:
+        return None
 
-    return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]
+def emission_per_atom(temperature, orthopararatio):
+    """
+    Compute the emission per H2 atom in the rovibrational states assuming
+    thermal level populations given a temperature and an ortho/para ratio of H2
+    """
+
+    para = 1/(1.+orthopararatio)
+    ortho = 1 - para
+
+    # Compute thermal level populations
+    level_population = {(V,J):
+                        (2*J+1)*np.exp(-h2level_energy(V,J)/(constants.k_B*temperature))*
+                        (para if J % 2 == 0 else ortho)
+                        for J in range(0,14)
+                        for V in range(0,6)}
+    total_population = sum(level_population.values())
+    level_population = {k:v/total_population for k,v in level_population.items()}
+
+    nphotons = {(V,J): aval(V,J,J-2) * level_population[(V,J)]
+                for J in range(2,14)
+                for V in range(1,6)
+                if aval(V,J,J-2) is not None}
+
+    return nphotons
