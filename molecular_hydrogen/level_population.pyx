@@ -43,5 +43,8 @@ def level_population(float temperature, float orthopararatio, int jmax,
                     for V in range(0,vmax)}
         vals = np.array(lp.values(), dtype='float')
         total_population = vals.sum()
-        lp = {k:v/total_population for k,v in lp.items()}
-        return lp
+        if total_population == 0:
+            return lp
+        else:
+            lp = {k:v/total_population for k,v in lp.items()}
+            return lp

@@ -195,8 +195,10 @@ def emission_per_atom_oneline(temperature, orthopararatio, vu, ju, jl, jmax=14, 
 
     return nphotons
 
-def vectorized_emission_per_atom_oneline(temperatures, orthopararatio, vu, ju, jl, jmax=14, vmax=6):
-    return np.array([emission_per_atom_oneline(t, orthopararatio, vu, ju, jl, jmax=jmax, vmax=vmax)
+def vectorized_emission_per_atom_oneline(temperatures, orthopararatio, vu, ju,
+                                         jl, jmax=14, vmax=6):
+    return np.array([emission_per_atom_oneline(t, orthopararatio, vu, ju, jl,
+                                               jmax=jmax, vmax=vmax)
                      for t in temperatures])
 
 
