@@ -4,16 +4,21 @@ from astropy import units as u
 from astropy import constants
 
 # define physical constants to high precision
-h=constants.h #6.626068e-27
-c=constants.c #2.99792e10
-k=constants.k_B # 1.3806503e-16
-e=constants.e #4.803e-12
+h=constants.h.cgs.value #6.626068e-27
+c=constants.c.cgs.value #2.99792e10
+k=constants.k_B.cgs # 1.3806503e-16
+kb = constants.k_B.cgs.value
+e=constants.e.esu #4.803e-12
 
-We=4401.21*u.cm**-1
-Be=60.853*u.cm**-1
-WeXe=121.33*u.cm**-1
-De=.0471*u.cm**-1
-Ae=3.062*u.cm**-1
+We=4401.21
+Be=60.853
+WeXe=121.33
+De=.0471
+Ae=3.062
+
+# http://www.nist.gov/data/nsrds/NSRDS-NBS31.pdf
+dissociation_energy = (432*u.kJ / constants.N_A).to(u.eV)
+dissociation_temperature = (dissociation_energy/constants.k_B).to(u.K)
 
 def h2level_energy(V,J):
     """ Returns the theoretical level energy as a function of the
@@ -22,13 +27,14 @@ def h2level_energy(V,J):
     Constants are from NIST:
     http://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Units=SI&Mask=1000#Diatomic
     (see the bottom of the table)
+
+    Returns a value in ergs
     """
 
     # not used re=0.74144
 
-    return (constants.h * constants.c * (We*(V+0.5) + Be*(J*(J+1)) -
-                                         WeXe*(V+.5)**2 - De*J**2*(J+1)**2 -
-                                         Ae*(V+.5)*(J+1)*J)).to(u.erg)
+    return (h * c *
+            (We*(V+0.5) + Be*(J*(J+1)) - WeXe*(V+.5)**2 - De*J**2*(J+1)**2 - Ae*(V+.5)*(J+1)*J))
 
 # Dalgarno 1984 table
 resten = np.array(
@@ -136,31 +142,54 @@ def aval(v,ju,jl):
     Values from: http://www.jach.hawaii.edu/UKIRT/astronomy/calib/spec_cal/h2_s.html
     """
     try:
-        return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]*u.s**-1
+        return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]
     except KeyError:
         return None
 
-def emission_per_atom(temperature, orthopararatio):
-    """
-    Compute the emission per H2 atom in the rovibrational states assuming
-    thermal level populations given a temperature and an ortho/para ratio of H2
-    """
+def level_population(temperature, orthopararatio, jmax, vmax):
 
     para = 1/(1.+orthopararatio)
     ortho = 1 - para
 
     # Compute thermal level populations
-    level_population = {(V,J):
-                        (2*J+1)*np.exp(-h2level_energy(V,J)/(constants.k_B*temperature))*
+    lp = {(V,J):
+                        (2*J+1)*np.exp(-h2level_energy(V,J)/(kb*temperature))*
                         (para if J % 2 == 0 else ortho)
-                        for J in range(0,14)
-                        for V in range(0,6)}
-    total_population = sum(level_population.values())
-    level_population = {k:v/total_population for k,v in level_population.items()}
+                        for J in range(0,jmax)
+                        for V in range(0,vmax)}
+    total_population = sum(lp.values())
+    lp = {k:v/total_population for k,v in lp.items()}
+    return lp
 
-    nphotons = {(V,J): aval(V,J,J-2) * level_population[(V,J)]
+
+def emission_per_atom(temperature, orthopararatio, jmax=14, vmax=6):
+    """
+    Compute the emission per H2 atom in the rovibrational states assuming
+    thermal level populations given a temperature and an ortho/para ratio of H2
+    """
+    lp = level_population(temperature, orthoparatio, jmax, vmax)
+
+    nphotons = {(V,J): aval(V,J,J-2) * lp[(V,J)]
                 for J in range(2,14)
                 for V in range(1,6)
                 if aval(V,J,J-2) is not None}
 
     return nphotons
+
+def emission_per_atom_oneline(temperature, orthopararatio, vu, ju, jl, jmax=14, vmax=6):
+    """
+    Compute the emission per H2 atom in the rovibrational states assuming
+    thermal level populations given a temperature and an ortho/para ratio of H2
+    """
+
+    lp = level_population(temperature, orthopararatio, jmax, vmax)
+
+    nphotons = aval(vu,ju,jl) * lp[(vu,ju)]
+
+    return nphotons
+
+def vectorized_emission_per_atom_oneline(temperatures, orthopararatio, vu, ju, jl, jmax=14, vmax=6):
+    return np.array([emission_per_atom_oneline(t, orthopararatio, vu, ju, jl, jmax=jmax, vmax=vmax)
+                     for t in temperatures])
+
+
