@@ -17,10 +17,15 @@ De=.0471
 Ae=3.062
 
 # http://www.nist.gov/data/nsrds/NSRDS-NBS31.pdf
-dissociation_energy = (432*u.kJ / constants.N_A).to(u.eV)
+dissociation_energy = (432*u.kJ / constants.N_A.value).to(u.eV)
 dissociation_temperature = (dissociation_energy/constants.k_B).to(u.K)
 
-def h2level_energy(V,J):
+import pyximport
+pyximport.install()
+from h2level_energy import h2level_energy
+from level_population import level_population
+
+def pyh2level_energy(V,J):
     """ Returns the theoretical level energy as a function of the
     vibrational (V) and rotational (J) state of the molecule.
     
@@ -29,6 +34,8 @@ def h2level_energy(V,J):
     (see the bottom of the table)
 
     Returns a value in ergs
+
+    (8x slower than cython version)
     """
 
     # not used re=0.74144
@@ -146,7 +153,7 @@ def aval(v,ju,jl):
     except KeyError:
         return None
 
-def level_population(temperature, orthopararatio, jmax, vmax):
+def pylevel_population(temperature, orthopararatio, jmax, vmax):
 
     para = 1/(1.+orthopararatio)
     ortho = 1 - para
