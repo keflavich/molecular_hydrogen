@@ -28,7 +28,7 @@ Installation
 
 .. code-block:: bash
 
-   $ pip install -e git@github.com:keflavich/molecular_hydrogen.git
+   $ pip install -e git+git@github.com:keflavich/molecular_hydrogen.git#egg=molecular_hydrogen
 
 Usage
 -----
