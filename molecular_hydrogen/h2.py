@@ -140,7 +140,7 @@ aval_dict = {1: {'S0':2.53e-7,
                  'S5':4.50e-7,}
              }
 
-reverse_transdiff = {v:k for k,v in transdiff.iteritems()}
+reverse_transdiff = {v:k for k,v in transdiff.items()}
 
 def aval(v,ju,jl):
     """
