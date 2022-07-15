@@ -82,6 +82,7 @@ def restwl(vu,vl,ju,jl):
     return (dl * u.m).to(u.um)
 
 transdiff = {'S':2,'Q':0,'O':-2}
+transdiff = {'S': 2, 'R': 1, 'Q': 0, 'P': -1, 'O': -2}
 
 def linename_to_restwl(linename):
     """
@@ -142,16 +143,40 @@ aval_dict = {1: {'S0':2.53e-7,
 
 reverse_transdiff = {v:k for k,v in transdiff.items()}
 
-def aval(v,ju,jl):
-    """
-    Lookup table for Einstein-A value as a function of
-    vibrational level, upper/lower J level
-    Values from: http://www.jach.hawaii.edu/UKIRT/astronomy/calib/spec_cal/h2_s.html
-    """
-    try:
-        return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]
-    except KeyError:
-        return None
+# def aval(v,ju,jl):
+#     """
+#     Lookup table for Einstein-A value as a function of
+#     vibrational level, upper/lower J level
+#     Values from: http://www.jach.hawaii.edu/UKIRT/astronomy/calib/spec_cal/h2_s.html
+#     """
+#     try:
+#         return aval_dict[v][reverse_transdiff[ju-jl]+str(jl)]
+#     except KeyError:
+#         return None
+
+
+def get_h2_tbl():
+    from astroquery.hitran import Hitran
+    tbl = Hitran.query_lines(molecule_number=45,
+                               isotopologue_number=1,
+                               min_frequency=(30*u.um).to(u.THz, u.spectral()),
+                               max_frequency=(0.9*u.um).to(u.THz, u.spectral()))
+    tbl['branch'] = [x[5] for x in tbl['local_lower_quanta']]
+    tbl['jl'] = [int(x.split()[1].strip('q')) for x in tbl['local_lower_quanta']]
+    tbl['ju'] = [LL + transdiff[BB] for LL, BB in zip(tbl['jl'], tbl['branch'])]
+    tbl['wl'] = (tbl['nu']*u.cm**-1).to(u.um, u.spectral())
+    tbl['el_K'] = (tbl['elower']*u.cm**-1 * constants.c * constants.h / constants.k_B).to(u.K)
+    tbl['global_lower_quanta'] = tbl['global_lower_quanta'].astype('int')
+    tbl['global_upper_quanta'] = tbl['global_upper_quanta'].astype('int')
+    return tbl
+
+
+def aval(vu, vl, ju, jl):
+    tbl = get_h2_tbl()
+    return tbl['a'][(tbl['jl'] == jl) & (tbl['ju'] == ju) &
+            (tbl['global_lower_quanta'].astype('int') == vl) &
+            (tbl['global_upper_quanta'].astype('int') == vu)][0] * u.s**-1
+
 
 def pylevel_population(temperature, orthopararatio, jmax, vmax):
 
@@ -160,11 +185,11 @@ def pylevel_population(temperature, orthopararatio, jmax, vmax):
 
     # Compute thermal level populations
     lp = {(V,J):
-                        (2*J+1)*np.exp(-h2level_energy(V,J)/(kb*temperature))*
-                        (para if J % 2 == 0 else ortho)
-                        for J in range(0,jmax)
-                        for V in range(0,vmax)}
-    total_population = sum(lp.values())
+          (2*J+1)*np.exp(-h2level_energy(V,J)/(kb*temperature))*
+          (para if J % 2 == 0 else ortho)
+          for J in range(0,jmax)
+          for V in range(0,vmax)}
+    total_population = sum(list(lp.values()))
     lp = {k:v/total_population for k,v in lp.items()}
     return lp
 

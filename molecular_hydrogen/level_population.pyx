@@ -41,7 +41,7 @@ def level_population(float temperature, float orthopararatio, int jmax,
                     (para if J % 2 == 0 else ortho)
                     for J in range(0,jmax)
                     for V in range(0,vmax)}
-        vals = np.array(lp.values(), dtype='float')
+        vals = np.array(list(lp.values()), dtype='float')
         total_population = vals.sum()
         if total_population == 0:
             return lp
