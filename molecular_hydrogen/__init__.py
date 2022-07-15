@@ -1,1 +1,1 @@
-import h2
+from . import h2

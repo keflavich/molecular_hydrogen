@@ -22,8 +22,8 @@ dissociation_temperature = (dissociation_energy/constants.k_B).to(u.K)
 
 import pyximport
 pyximport.install()
-from h2level_energy import h2level_energy
-from level_population import level_population
+from .h2level_energy import h2level_energy
+from .level_population import level_population
 
 def pyh2level_energy(V,J):
     """ Returns the theoretical level energy as a function of the
