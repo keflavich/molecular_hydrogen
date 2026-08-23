@@ -1,10 +1,13 @@
 """
 Molecular hydrogen rovibrational line properties.
 
-Rest wavelengths come from the measured X-state term values of
-Dabrowski (1984), Can. J. Phys. 62, 1639.  Einstein A coefficients are looked
-up from HITRAN (molecule 45) via `astroquery`.
+Rest wavelengths are computed from measured X-state term values.  Two sets are
+bundled: the Dabrowski (1984), Can. J. Phys. 62, 1639 table (`resten`, V=0-5,
+J=0-13), and a grid derived from the HITRAN line list that extends the coverage
+to V=0-14 and J=0-31 (`get_level_energies`, used by default).  Einstein A
+coefficients are looked up from HITRAN (molecule 45) via `astroquery`.
 """
+import os
 import re
 
 import numpy as np
@@ -119,7 +122,36 @@ resten = np.array(
        [9523.82,  13191.06,  16632.1 ,  19847.08,  22834.61,  25590.22]])
 
 
-def level_energy(V, J):
+# The Dabrowski table above stops at V=5, J=13.  `h2_level_energies.ecsv`
+# extends the coverage to V=0-14 and J=0-31 (J up to 31 for V=0) using the
+# level energies implied by the HITRAN line list; see
+# tools/make_level_energies.py.  The grid is ragged -- high J levels are only
+# populated for low V -- and missing entries are NaN.
+_LEVEL_ENERGY_FILE = os.path.join(os.path.dirname(__file__), 'data',
+                                  'h2_level_energies.ecsv')
+_level_energies = None
+
+
+def get_level_energies():
+    """
+    The full grid of measured X-state term values, in cm^-1, indexed as
+    ``energies[J][V]``.  Levels that are not covered are NaN.
+
+    Returns
+    -------
+    `~numpy.ndarray` of shape (32, 15)
+    """
+    global _level_energies
+    if _level_energies is None:
+        from astropy.table import Table
+        tbl = Table.read(_LEVEL_ENERGY_FILE)
+        grid = np.full((tbl['J'].max()+1, tbl['V'].max()+1), np.nan)
+        grid[tbl['J'], tbl['V']] = tbl['energy']
+        _level_energies = grid
+    return _level_energies
+
+
+def level_energy(V, J, extended=True):
     """
     Measured term value of the X-state (V, J) level.
 
@@ -127,21 +159,38 @@ def level_energy(V, J):
     ----------
     V, J : int
         Vibrational and rotational quantum numbers
+    extended : bool
+        Use the HITRAN-derived grid (V=0-14, J=0-31)?  If False, only the
+        Dabrowski (1984) table (V=0-5, J=0-13) in `resten` is consulted.
 
     Returns
     -------
     Energy above the (V=0, J=0) level, in cm^-1
+
+    Examples
+    --------
+    >>> float(level_energy(0, 1).value)
+    118.4869
+    >>> float(level_energy(0, 25).value)   # beyond the Dabrowski table
+    26621.8457
     """
-    if not (0 <= J < resten.shape[0]) or not (0 <= V < resten.shape[1]):
+    if not extended:
+        if not (0 <= J < resten.shape[0]) or not (0 <= V < resten.shape[1]):
+            raise NotImplementedError("No data for V=%s, J=%s" % (V, J))
+        return resten[J][V] * u.cm**-1
+
+    energies = get_level_energies()
+    if not (0 <= J < energies.shape[0]) or not (0 <= V < energies.shape[1]):
         raise NotImplementedError("No data for V=%s, J=%s" % (V, J))
-    return resten[J][V] * u.cm**-1
+    energy = energies[J][V]
+    if np.isnan(energy):
+        raise NotImplementedError("No data for V=%s, J=%s" % (V, J))
+    return energy * u.cm**-1
 
 
-def restwl(vu, vl, ju, jl):
+def restwl(vu, vl, ju, jl, extended=True):
     """
     Rest wavelength of a rovibrational transition.
-
-    Uses energy levels measured by Dabrowski, Can. J. Phys. 62, 1639, 1984.
 
     Parameters
     ----------
@@ -149,6 +198,9 @@ def restwl(vu, vl, ju, jl):
         upper and lower vibrational states
     ju,jl : int,int
         upper and lower rotational states
+    extended : bool
+        Use the HITRAN-derived term values (V=0-14, J=0-31)?  If False, use
+        only the Dabrowski (1984) table, which covers V=0-5, J=0-13.
 
     Returns
     -------
@@ -157,19 +209,26 @@ def restwl(vu, vl, ju, jl):
     Examples
     --------
     >>> round(float(restwl(1, 0, 3, 1).value), 6)
-    2.121831
-    """
-    for V, J, which in ((vu, ju, 'upper'), (vl, jl, 'lower')):
-        if not (0 <= J < resten.shape[0]) or not (0 <= V < resten.shape[1]):
-            raise NotImplementedError("No data for the %s level v=%s, J=%s"
-                                      % (which, V, J))
+    2.121834
 
-    denergy = resten[ju][vu] - resten[jl][vl]
+    High-J pure rotational lines are available with the extended table:
+
+    >>> round(float(restwl(0, 0, 22, 20).value), 4)
+    3.3812
+    """
+    try:
+        eu = level_energy(vu, ju, extended=extended)
+        el = level_energy(vl, jl, extended=extended)
+    except NotImplementedError as ex:
+        raise NotImplementedError(
+            "%s (transition %s)" % (ex, restwl_to_linename(vu, vl, ju, jl)))
+
+    denergy = (eu - el).to(u.cm**-1).value
     if denergy <= 0:
         raise ValueError("The upper level (v=%s, J=%s) is not above the lower "
                          "level (v=%s, J=%s)" % (vu, ju, vl, jl))
 
-    # resten is in inverse cm.  Convert to m
+    # the term values are in inverse cm.  Convert to m
     dl = .01/denergy
     return (dl * u.m).to(u.um)
 
@@ -181,7 +240,7 @@ _linename_re = re.compile(r'([0-9]+)\s*-\s*([0-9]+)')
 _branch_re = re.compile(r'([%s])\(([0-9]+)\)' % ''.join(sorted(transdiff)))
 
 
-def linename_to_restwl(linename):
+def linename_to_restwl(linename, extended=True):
     """
     Parse a line name of the form S(1) 1-0, Q(2) 2-1, or 0-0 S(0), etc.
 
@@ -192,6 +251,8 @@ def linename_to_restwl(linename):
         vibrational levels, the letter is the rotational branch (one of
         O, P, Q, R, S), and the last number is the lower rotational state of
         the transition
+    extended : bool
+        Passed through to `restwl`.
 
     Returns
     -------
@@ -200,9 +261,11 @@ def linename_to_restwl(linename):
     Examples
     --------
     >>> round(float(linename_to_restwl('1-0 S(1)').value), 6)
-    2.121831
+    2.121834
     >>> round(float(linename_to_restwl('1-0 Q(1)').value), 6)
-    2.406594
+    2.406592
+    >>> round(float(linename_to_restwl('0-0 S(20)').value), 4)
+    3.3812
     """
     vmatch = _linename_re.search(linename)
     bmatch = _branch_re.search(linename)
@@ -212,7 +275,8 @@ def linename_to_restwl(linename):
     upper, lower = vmatch.groups()
     transtype, jl = bmatch.groups()
     ju = int(jl) + transdiff[transtype]
-    return restwl(int(upper), int(lower), ju, int(jl))
+    return restwl(int(upper), int(lower), ju, int(jl),
+                  extended=extended)
 
 
 def restwl_to_linename(vu, vl, ju, jl):

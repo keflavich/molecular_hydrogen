@@ -64,9 +64,29 @@ class TestRestWavelengths:
 
     def test_out_of_range_raises(self):
         with pytest.raises(NotImplementedError):
-            h2.restwl(1, 0, 30, 28)
+            h2.restwl(1, 0, 40, 38)
         with pytest.raises(NotImplementedError):
-            h2.restwl(9, 0, 3, 1)
+            h2.restwl(20, 0, 3, 1)
+        # a corner of the grid that HITRAN does not cover
+        with pytest.raises(NotImplementedError):
+            h2.restwl(14, 0, 31, 29)
+
+    def test_out_of_range_raises_without_extended_table(self):
+        with pytest.raises(NotImplementedError):
+            h2.restwl(1, 0, 30, 28, extended=False)
+        with pytest.raises(NotImplementedError):
+            h2.restwl(9, 0, 3, 1, extended=False)
+
+    def test_extended_table_is_used_by_default(self):
+        """
+        The extended (HITRAN) term values are quoted to 0.0001 cm^-1 against
+        0.01 cm^-1 for `resten`, so the two differ slightly.
+        """
+        assert (h2.restwl(1, 0, 3, 1) !=
+                h2.restwl(1, 0, 3, 1, extended=False))
+        np.testing.assert_allclose(h2.restwl(1, 0, 3, 1).value,
+                                   h2.restwl(1, 0, 3, 1, extended=False).value,
+                                   rtol=1e-5)
 
     def test_negative_quantum_number_raises(self):
         # an O-branch line out of the bottom of the ladder
@@ -120,11 +140,15 @@ class TestLevelEnergies:
 
     def test_level_energy_units(self):
         assert h2.level_energy(0, 1).unit == u.cm**-1
-        np.testing.assert_allclose(h2.level_energy(0, 1).value, 118.50)
+        np.testing.assert_allclose(h2.level_energy(0, 1).value, 118.4869)
+        np.testing.assert_allclose(
+            h2.level_energy(0, 1, extended=False).value, 118.50)
 
     def test_level_energy_out_of_range(self):
         with pytest.raises(NotImplementedError):
-            h2.level_energy(0, 20)
+            h2.level_energy(0, 40)
+        with pytest.raises(NotImplementedError):
+            h2.level_energy(0, 20, extended=False)
 
 
 class TestLevelPopulation:
@@ -217,3 +241,98 @@ def test_dissociation_energy():
                                rtol=0.01)
     np.testing.assert_allclose(h2.dissociation_temperature.to(u.K).value,
                                52000, rtol=0.01)
+
+
+class TestExtendedLevelEnergies:
+    """
+    The Dabrowski (1984) table stops at V=5, J=13.  `get_level_energies`
+    extends this to V=0-14, J=0-31 using the level energies implied by the
+    HITRAN line list.
+    """
+
+    def test_shape(self):
+        assert h2.get_level_energies().shape == (32, 15)
+
+    def test_cached(self):
+        assert h2.get_level_energies() is h2.get_level_energies()
+
+    def test_ground_state_is_zero(self):
+        assert h2.get_level_energies()[0][0] == 0
+
+    def test_v0_covers_j_up_to_31(self):
+        """The specific gap this table was added to fill: v=0, J>13."""
+        v0 = h2.get_level_energies()[:, 0]
+        assert np.isfinite(v0).all()
+        assert len(v0) == 32
+
+    def test_ragged_grid_has_nans(self):
+        """High J is only reached for low V; those entries must be NaN."""
+        energies = h2.get_level_energies()
+        assert np.isnan(energies[31][1])
+        assert np.isnan(energies[20][10])
+
+    def test_monotonic_in_J_where_defined(self):
+        energies = h2.get_level_energies()
+        for V in range(energies.shape[1]):
+            column = energies[:, V]
+            column = column[np.isfinite(column)]
+            assert (np.diff(column) > 0).all(), "V=%i not monotonic" % V
+
+    def test_monotonic_in_V_where_defined(self):
+        energies = h2.get_level_energies()
+        for J in range(energies.shape[0]):
+            row = energies[J, :]
+            row = row[np.isfinite(row)]
+            assert (np.diff(row) > 0).all(), "J=%i not monotonic" % J
+
+    def test_below_dissociation(self):
+        """
+        Every tabulated level must lie below the dissociation limit, and the
+        topmost one (V=14) should sit just under it: D0 = 36118.07 cm^-1
+        (Liu et al. 2009, J. Chem. Phys. 130, 174306).  ``h2.dissociation_energy``
+        is derived from a rounded 432 kJ/mol and is ~6 cm^-1 low, so the
+        accurate value is used here.
+        """
+        D0 = 36118.07
+        energies = h2.get_level_energies()
+        finite = energies[np.isfinite(energies)]
+        assert finite.max() <= D0
+        assert finite.max() > 0.99 * D0
+        np.testing.assert_allclose(
+            h2.dissociation_energy.to(u.cm**-1, u.spectral()).value, D0,
+            rtol=1e-3)
+
+    def test_agrees_with_dabrowski_table(self):
+        """
+        Where the two overlap they must agree; `resten` is quoted to 0.01
+        cm^-1.
+        """
+        energies = h2.get_level_energies()
+        for J in range(h2.resten.shape[0]):
+            for V in range(h2.resten.shape[1]):
+                np.testing.assert_allclose(
+                    energies[J][V], h2.resten[J][V], atol=0.25,
+                    err_msg="V=%i, J=%i" % (V, J))
+
+    def test_high_j_pure_rotational_lines(self):
+        """
+        Pure rotational 0-0 S(J) lines for J > 13, which could not be computed
+        before.  Values from HITRAN.
+        """
+        for linename, wavelength in [('0-0 S(14)', 3.7245),
+                                     ('0-0 S(15)', 3.6263),
+                                     ('0-0 S(20)', 3.3812),
+                                     ('0-0 S(25)', 3.4111),
+                                     ('0-0 S(29)', 3.5992)]:
+            result = h2.linename_to_restwl(linename)
+            np.testing.assert_allclose(result.to(u.um).value, wavelength,
+                                       rtol=1e-4, err_msg=linename)
+
+    def test_rotational_ladder_turns_over(self):
+        """
+        The 0-0 S(J) wavelengths shorten with J up to about J=20 and then
+        lengthen again as the centrifugal distortion flattens the ladder.
+        """
+        wl = np.array([h2.linename_to_restwl('0-0 S(%i)' % J).value
+                       for J in range(10, 30)])
+        assert wl.argmin() not in (0, len(wl)-1)

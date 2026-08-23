@@ -48,7 +48,15 @@ Rest wavelengths are returned as ``astropy`` quantities:
    >>> h2.linename_to_restwl('S(0) 0-0')
    <Quantity 28.22068576 micron>
    >>> h2.restwl(vu=1, vl=0, ju=3, jl=1)
-   <Quantity 2.12183131 micron>
+   <Quantity 2.12183370 micron>
+
+High-J and high-v levels are covered, well past the v=0-5, J=0-13 of the
+classic Dabrowski table:
+
+   >>> h2.linename_to_restwl('0-0 S(25)')
+   <Quantity 3.41112185 micron>
+   >>> h2.level_energy(V=0, J=31)
+   <Quantity 35200.8398 1 / cm>
 
 Einstein A coefficients come from HITRAN:
 
@@ -74,10 +82,20 @@ returns by default.
 Data sources
 ------------
 
-Rest wavelengths are computed from the measured X-state term values of
-Dabrowski (1984), Can. J. Phys. 62, 1639, covering v = 0-5 and J = 0-13.
-Einstein A coefficients and the extended line list come from HITRAN
-(molecule 45).
+Two sets of X-state term values are bundled.
+
+``h2.resten`` holds the measured values of Dabrowski (1984), Can. J. Phys. 62,
+1639, covering v = 0-5 and J = 0-13, quoted to 0.01 cm^-1.
+
+``h2.get_level_energies()`` returns a larger grid, covering v = 0-14 and
+J = 0-31 (J = 0-31 for v = 0) to 0.0001 cm^-1.  It is derived from the HITRAN
+line list: every level in the list is recovered from the tabulated lower state
+energies and transition wavenumbers, and levels reached by several transitions
+agree to better than 0.003 cm^-1.  This is the default; pass
+``extended=False`` to ``restwl`` or ``linename_to_restwl`` to use only the
+Dabrowski table.  Regenerate it with ``python tools/make_level_energies.py``.
+
+Einstein A coefficients also come from HITRAN (molecule 45).
 
 Tests
 -----

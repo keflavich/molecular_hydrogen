@@ -82,18 +82,22 @@ class TestWavelengthsAgainstHitran:
     def test_dabrowski_matches_hitran(self, tbl, linename, wavelength):
         """
         The rest wavelengths computed from the Dabrowski (1984) term values
-        must agree with HITRAN to better than 1e-4 microns.
+        must agree with HITRAN.  ``extended=False`` is essential: the extended
+        table is itself derived from HITRAN, so the comparison would otherwise
+        be circular.
         """
         row = tbl[tbl['linename'] == linename]
         assert len(row) > 0, "%s missing from HITRAN table" % linename
-        ours = h2.linename_to_restwl(linename)
+        ours = h2.linename_to_restwl(linename, extended=False)
         np.testing.assert_allclose(ours.to(u.um).value, float(row['wl'][0]),
                                    rtol=2e-4)
 
     def test_all_tabulated_levels_agree_with_hitran(self, tbl):
         """
         Cross-check every transition we can compute from `resten` against
-        HITRAN.  This is what caught the V=0, J=12 typo.
+        HITRAN.  This is what caught the V=0, J=12 typo.  ``extended=False``
+        keeps this a real check on the Dabrowski table rather than a
+        comparison of HITRAN with itself.
         """
         quad = tbl[tbl['transition_type'] == 'q']
         checked = 0
@@ -104,7 +108,8 @@ class TestWavelengthsAgainstHitran:
                     ju >= h2.resten.shape[0] or jl >= h2.resten.shape[0] or
                     ju < 0 or jl < 0):
                 continue
-            ours = h2.restwl(vu, vl, ju, jl).to(u.um).value
+            ours = h2.restwl(vu, vl, ju, jl,
+                             extended=False).to(u.um).value
             theirs = float(row['wl'])
             assert abs(ours - theirs) / theirs < 5e-4, \
                 "%s: %.6f vs HITRAN %.6f" % (row['linename'], ours, theirs)
@@ -171,3 +176,42 @@ class TestEmission:
         n = h2.emission_per_atom(2000., 3.)
         assert len(n) > 0
         assert all(v.value >= 0 for v in n.values())
+
+
+class TestExtendedTableAgainstHitran:
+
+    def test_extended_wavelengths_reproduce_hitran(self, tbl):
+        """
+        The bundled level energies must reproduce the HITRAN line wavelengths
+        they were derived from, for every transition in the table.
+        """
+        quad = tbl[tbl['transition_type'] == 'q']
+        energies = h2.get_level_energies()
+        checked = 0
+        for row in quad:
+            vu, vl = row['global_upper_quanta'], row['global_lower_quanta']
+            ju, jl = row['ju'], row['jl']
+            if (ju < 0 or jl < 0 or ju >= energies.shape[0] or
+                    jl >= energies.shape[0] or vu >= energies.shape[1] or
+                    vl >= energies.shape[1]):
+                continue
+            if not (np.isfinite(energies[ju][vu]) and
+                    np.isfinite(energies[jl][vl])):
+                continue
+            ours = h2.restwl(vu, vl, ju, jl).to(u.um).value
+            theirs = float(row['wl'])
+            assert abs(ours - theirs) / theirs < 1e-5, \
+                "%s: %.6f vs HITRAN %.6f" % (row['linename'], ours, theirs)
+            checked += 1
+        assert checked > 1000
+
+    def test_every_hitran_level_is_in_the_table(self, tbl):
+        """No level appearing in the line list may be missing from the grid."""
+        energies = h2.get_level_energies()
+        for row in tbl:
+            for V, J in ((row['global_lower_quanta'], row['jl']),
+                         (row['global_upper_quanta'], row['ju'])):
+                assert V < energies.shape[1] and J < energies.shape[0], \
+                    "level V=%s J=%s outside the grid" % (V, J)
+                assert np.isfinite(energies[J][V]), \
+                    "level V=%s J=%s missing from the grid" % (V, J)
