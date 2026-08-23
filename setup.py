@@ -1,27 +1,30 @@
 #!/usr/bin/env python
 
-import os
-import shutil
-import sys
-from distutils.core import setup, Command
+from setuptools import setup
 
-if 'develop' in sys.argv:
-    # use setuptools for develop, but nothing else
-    from setuptools import setup
+with open('README.rst') as fh:
+    long_description = fh.read()
 
 setup(name='molecular_hydrogen',
-      version='0.1',
+      version='0.2',
       description='Molecular Parameters for H2',
-      author=['Adam Ginsburg'],
-      author_email=['adam.g.ginsburg@gmail.com'], 
+      long_description=long_description,
+      long_description_content_type='text/x-rst',
+      author='Adam Ginsburg',
+      author_email='adam.g.ginsburg@gmail.com',
       url='https://github.com/keflavich/molecular_hydrogen/',
-      packages=['molecular_hydrogen'],
-      requires=['numpy'],
+      packages=['molecular_hydrogen', 'molecular_hydrogen.tests'],
+      package_data={'molecular_hydrogen': ['*.pyx']},
+      install_requires=['numpy', 'astropy'],
+      extras_require={'hitran': ['astroquery'],
+                      'speed': ['cython'],
+                      'test': ['pytest', 'astroquery']},
+      license='MIT',
       classifiers=[
                    "Development Status :: 4 - Beta",
-                   "Programming Language :: Python",
+                   "Intended Audience :: Science/Research",
+                   "Programming Language :: Python :: 3",
+                   "Topic :: Scientific/Engineering :: Astronomy",
                    "License :: OSI Approved :: MIT License",
                   ],
-      
      )
-

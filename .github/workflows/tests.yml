@@ -1,0 +1,54 @@
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test,speed]
+      - name: Run tests
+        run: python -m pytest -v
+
+  test-no-cython:
+    # the package must import and work without a compiler available
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install without cython
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test]
+      - name: Run tests
+        run: |
+          python -c "from molecular_hydrogen import h2; assert not h2.HAS_COMPILED_EXTENSIONS"
+          python -m pytest -v
+
+  remote-data:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[test,speed]
+      - name: Run tests including HITRAN queries
+        run: python -m pytest -v --remote-data

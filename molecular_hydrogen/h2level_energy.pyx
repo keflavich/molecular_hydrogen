@@ -1,6 +1,7 @@
+# cython: language_level=3
 from astropy import constants
 
-cdef float h,c,k,kb,e,We,Be,WeXe,De,Ae
+cdef double h,c,k,kb,e,We,Be,WeXe,De,Ae
 
 h = constants.h.cgs.value #6.626068e-27
 c = constants.c.cgs.value #2.99792e10
@@ -13,7 +14,7 @@ WeXe=121.33
 De=0.0471
 Ae=3.062
 
-def h2level_energy(int V,int J):
+def h2level_energy(int V, int J):
     """ Returns the theoretical level energy as a function of the
     vibrational (V) and rotational (J) state of the molecule.
     

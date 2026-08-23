@@ -1,10 +1,11 @@
+# cython: language_level=3
 from astropy import constants
 import pyximport
 pyximport.install()
-from h2level_energy import h2level_energy
+from .h2level_energy import h2level_energy
 import numpy as np
 
-cdef float h,c,kb,e,We,Be,WeXe,De,Ae
+cdef double h,c,kb,e,We,Be,WeXe,De,Ae
 
 h = constants.h.cgs.value #6.626068e-27
 c = constants.c.cgs.value #2.99792e10
@@ -18,17 +19,17 @@ De=0.0471
 Ae=3.062
 
 
-def level_population(float temperature, float orthopararatio, int jmax,
+def level_population(double temperature, double orthopararatio, int jmax,
                      int vmax):
 
-    cdef float para,ortho,total_population,v
+    cdef double para,ortho,total_population,v
     cdef int V,J
 
     para = 1./(1.+orthopararatio)
     ortho = 1. - para
 
     # Compute thermal level populations
-    cdef float kbt = (kb*temperature)
+    cdef double kbt = (kb*temperature)
     if kbt == 0.0:
         # can't have div by zero...
         return {(V,J):np.nan
